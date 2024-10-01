@@ -1,0 +1,192 @@
+name: Generate Mozc Dependencies
+
+on:
+  workflow_dispatch:
+
+jobs:
+  Mozc-Dependency-amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v3
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-${{ github.job }}-dependencies
+
+      - name: startup
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sudo apt-utils wget unzip
+
+      - name: Non root user setup
+        run: |
+          # non root
+          sudo useradd -m -u 2001 nonroot
+          sudo mkdir -p /github/workspace
+          sudo chown -R nonroot:nonroot /github/workspace
+          sudo -u nonroot whoami
+          sudo -u nonroot id
+          whoami
+          id
+
+      - name: install bazel
+        run: |
+          # bazel
+          sudo wget -qO /usr/local/bin/bazel https://github.com/bazelbuild/bazel/releases/download/7.3.1/bazel-7.3.1-linux-x86_64
+          sudo chmod a+x /usr/local/bin/bazel
+
+      - name: install Build Dependency
+        run: |
+          # mantic, lunar, jammy
+          sudo sed 's/^.*deb-src /deb-src /' -i /etc/apt/sources.list||true
+          # noble
+          # sudo sed 's/Types: deb *$/Types: deb deb-src/' -i /etc/apt/sources.list.d/ubuntu.sources||true
+          sudo apt-get update
+          sudo apt-get build-dep -y mozc
+          sudo apt-get install -y build-essential dpkg-dev make git qt6ct qt6-base-dev libfcitx5-qt6-dev curl jq pipx
+          pipx install yq
+
+      - name: Generate Mozc Dependency
+        run: |
+          sed  -i 's|bazel clean.*|rm -rf $HOME/.cache/bazel|' update_mozc_deps
+          sudo -u nonroot cp ./update_mozc_deps /github/workspace/
+          sudo -u nonroot cp ./bazel_mirror.py /github/workspace/
+          sudo -u nonroot cp ./downloader.cfg /github/workspace/
+          WORKSPACE=$PWD
+          echo $WORKSPACE
+          echo $GITHUB_WORKSPACE
+          cd /github/workspace
+          sudo -u nonroot PATH=$PATH:/usr/local/bin TMPDIR=/github/workspace/tmp/ ./update_mozc_deps
+          sudo cp ./mozc-deps.yaml $WORKSPACE/deps_amd64.yaml || true
+          sudo ls -la $WORKSPACE
+      - name: Upload deps file
+        uses: actions/upload-artifact@v4
+        with:
+          name: deps-amd64
+          path: deps_amd64.yaml
+
+  Mozc-Dependency-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v3
+        with:
+          path: /var/cache/apt/archives
+          key: ${{ runner.os }}-${{ github.job }}-dependencies
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Prepare aarch64 container
+        run: |
+          # ubuntu-noble
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+          docker pull arm64v8/ubuntu:mantic
+
+      - name: Start aarch64 container
+        run: |
+          docker run -d --name ubuntu-arm64 --platform linux/arm64 \
+            -v $GITHUB_WORKSPACE:/workspace \
+            arm64v8/ubuntu:mantic \
+            sleep infinity
+
+      - name: startup
+        run: |
+          docker exec -u 0 ubuntu-arm64 bash -c "
+            cat /etc/lsb-release
+            apt-get update
+            apt-get install -y sudo apt-utils wget unzip
+          "
+
+      - name: Non root user setup
+        run: |
+          docker exec -u 0 ubuntu-arm64 bash -c "
+            # non root
+            sudo useradd -m -u 2001 nonroot
+            sudo mkdir -p /github/workspace
+            sudo chown -R nonroot:nonroot /github/workspace
+            sudo -u nonroot whoami
+            sudo -u nonroot id
+            whoami
+            id
+          "
+
+      - name: install bazel
+        run: |
+          docker exec ubuntu-arm64 bash -c "
+            # bazel
+            sudo wget -qO /usr/local/bin/bazel https://github.com/bazelbuild/bazel/releases/download/7.3.1/bazel-7.3.1-linux-arm64
+            sudo chmod a+x /usr/local/bin/bazel
+          "
+
+      - name: install Build Dependency
+        run: |
+          docker exec ubuntu-arm64 bash -c "
+            # mantic, lunar, jammy
+            sudo sed 's/^.*deb-src /deb-src /' -i /etc/apt/sources.list||true
+            # noble
+            sudo sed 's/Types: deb *$/Types: deb deb-src/' -i /etc/apt/sources.list.d/ubuntu.sources||true
+            sudo apt-get update
+            sudo apt-get build-dep -y mozc
+            sudo apt-get install -y build-essential dpkg-dev make git qt6ct qt6-base-dev libfcitx5-qt6-dev curl jq pipx
+            pipx install yq
+          "
+
+      - name: Generate Mozc Dependency
+        run: |
+          sed -i 's|bazel clean.*|rm -rf $HOME/.cache/bazel|' update_mozc_deps
+          docker cp update_mozc_deps ubuntu-arm64:/workspace/
+          docker cp bazel_mirror.py ubuntu-arm64:/workspace/
+          docker cp downloader.cfg ubuntu-arm64:/workspace/
+          docker exec -u 0 ubuntu-arm64 bash -c "
+            chmod +x /workspace/update_mozc_deps
+            sudo -u nonroot mkdir -p /github/workspace/tmp
+            chown -R nonroot:nonroot /github/workspace /workspace
+            sudo -u nonroot PATH=$PATH:/usr/local/bin TMPDIR=/github/workspace/tmp /workspace/update_mozc_deps
+            cp /workspace/mozc-deps.yaml /workspace/deps_arm64.yaml
+            ls -la /workspace
+          "
+          docker cp ubuntu-arm64:/workspace/deps_arm64.yaml ./deps_arm64.yaml
+
+      - name: Upload deps file
+        uses: actions/upload-artifact@v4
+        with:
+          name: deps-arm64
+          path: deps_arm64.yaml
+
+  combine-deps:
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    needs: [ Mozc-Dependency-amd64, Mozc-Dependency-arm64 ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yq and jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq pipx
+          pipx install yq
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: deps-*
+          path: deps
+
+      - name: Combine and deduplicate deps
+        run: |
+          ls -lR deps/
+          cat deps/*/deps_*.yaml > combined_deps.yaml
+          yq -y 'unique_by(.url)|sort_by(.url)' combined_deps.yaml > mozc-deps.yaml
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add mozc-deps.yaml
+          git commit -m "Update mozc-deps.yaml with latest dependencies"
+          git push
