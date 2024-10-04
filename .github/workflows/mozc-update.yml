@@ -28,7 +28,7 @@ jobs:
 
       - name: Prepare qemu user static
         run: |
-          pacman -Syu --needed --noconfirm sudo wget flatpak qemu-user-static-binfmt
+          pacman -Syu --needed --noconfirm sudo wget flatpak qemu-user-static-binfmt aarch64-linux-gnu-glibc aarch64-linux-gnu-gcc
           sudo mount binfmt_misc -t binfmt_misc /proc/sys/fs/binfmt_misc||true
           cat /usr/lib/binfmt.d/qemu-aarch64-static.conf|sudo tee /proc/sys/fs/binfmt_misc/register||true
           sudo /usr/lib/systemd/systemd-binfmt
@@ -49,6 +49,13 @@ jobs:
           wget -nc -qO $PWD/bazel-arm64 https://github.com/bazelbuild/bazel/releases/download/7.3.2/bazel-7.3.2-linux-arm64
           chmod +x $PWD/bazel-arm64
           su builduser -c "flatpak run --filesystem=$PWD --filesystem=home --share=network --command=$BASE/bazel-arm64 org.freedesktop.Sdk/aarch64/23.08 --version"
+          LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:/usr/aarch64-linux-gnu/lib:$LD_LIBRARY_PATH \
+          QEMU_LD_PREFIX=/usr/aarch64-linux-gnu PATH=$PATH:/usr/local/bin \
+          flatpak run --filesystem=host --filesystem=$PWD --filesystem=home --share=network --command=sh org.freedesktop.Sdk/aarch64/23.08 -c "/usr/lib/sdk/bazel/bin/bazel --version"
+          echo "1:"
+          LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:/usr/aarch64-linux-gnu/lib:$LD_LIBRARY_PATH \
+          QEMU_LD_PREFIX=/usr/aarch64-linux-gnu PATH=$PATH:/usr/local/bin \
+          flatpak run --filesystem=host --filesystem=$PWD --filesystem=home --share=network --command=sh org.freedesktop.Sdk/aarch64/23.08 -c "/usr/lib/sdk/bazel/bin/bazel --version"
 
       - name: Install Build Dependency
         run: |
@@ -67,7 +74,7 @@ jobs:
           #sudo chown -R builduser:builduser /home/builduser
 
           sudo -u builduser \
-            LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:$LD_LIBRARY_PATH \
+            LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:/usr/aarch64-linux-gnu/lib:$LD_LIBRARY_PATH \
             QEMU_LD_PREFIX=/usr/aarch64-linux-gnu PATH=$PATH:/usr/local/bin \
             TMPDIR=/home/builduser/tmp \
             ./update_mozc_deps
