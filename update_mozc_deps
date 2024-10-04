@@ -30,8 +30,22 @@ check_and_download_bazel() {
 run_bazel() {
     echo $1 clean --expunge
     # $1 clean --expunge
-    echo $1 build --nobuild --experimental_downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://$BASE/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build $2
-    $1 build --nobuild --experimental_downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://$BASE/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build $2
+    echo $1 build --nobuild --experimental_downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://$BASE/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build "$2"
+    $1 build --nobuild --experimental_downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://$BASE/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build "$2"
+}
+
+run_bazel() {
+    echo $1 -c "$2 clean --expunge"
+    # $1 clean --expunge
+    echo $1 -c ""$2" build --nobuild --experimental_downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://"$BASE"/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build" "$3"
+    $1 -c "$2 build --nobuild --experimental_downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://"$BASE"/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build "$3""
+}
+
+run_bazel_flatpak() {
+    echo $1 -c "$2 clean --expunge"
+    # $1 clean --expunge
+    echo $1 -c "$2 build --nobuild --experimental_downloader_config=$SCRIPT_DIRECTORY/downloader.cfg --registry=file://$BASE/bcr --repository_cache=$_MOZC_BAZEL_CACHE --config oss_linux --config release_build $3"
+    $1 -c "$2 build --nobuild --experimental_downloader_config=$SCRIPT_DIRECTORY/downloader.cfg --registry=file://$BASE/bcr --repository_cache=$_MOZC_BAZEL_CACHE --config oss_linux --config release_build $3"
 }
 
 trap cleanup EXIT
@@ -87,7 +101,29 @@ cd mozc/src/
 BUILD_TARGET_SERVER="server:mozc_server"
 BUILD_TARGET="unix/fcitx5:fcitx5-mozc.so ${BUILD_TARGET_SERVER} gui/tool:mozc_tool"
 
-run_bazel "$BASE/bazel-x86_64" $BUILD_TARGET
+#run_bazel "$BASE/bazel-x86_64" $BUILD_TARGET
+
+ARCH=x86_64
+run_bazel_flatpak "flatpak run --arch=$ARCH --env=PATH=/app/bin:/usr/bin:/usr/local/bin:/usr/lib/sdk/bazel/bin
+--env=PATH=$PATH:/usr/lib/sdk/bazel/bin:/app/bin
+--env=SCRIPT_DIRECTORY=$SCRIPT_DIRECTORY
+--env=_MOZC_BAZEL_CACHE=$_MOZC_BAZEL_CACHE
+--env=PKG_CONFIG_PATH=/app/lib/pkgconfig
+--filesystem=$SCRIPT_DIRECTORY --filesystem=home --share=network --filesystem=xdg-cache
+--command=sh
+--runtime=org.kde.Sdk/$ARCH/6.6
+org.fcitx.Fcitx5/$ARCH/stable" /usr/lib/sdk/bazel/bin/bazel "$BUILD_TARGET"
+
+ARCH=aarch64
+run_bazel_flatpak "flatpak run --arch=$ARCH --env=PATH=/app/bin:/usr/bin:/usr/local/bin:/usr/lib/sdk/bazel/bin
+--env=PATH=$PATH:/usr/lib/sdk/bazel/bin:/app/bin
+--env=SCRIPT_DIRECTORY=$SCRIPT_DIRECTORY
+--env=_MOZC_BAZEL_CACHE=$_MOZC_BAZEL_CACHE
+--env=PKG_CONFIG_PATH=/app/lib/pkgconfig
+--filesystem=$SCRIPT_DIRECTORY --filesystem=home --share=network --filesystem=xdg-cache
+--command=sh
+org.freedesktop.Sdk/$ARCH/23.08" /usr/lib/sdk/bazel/bin/bazel "$BUILD_TARGET_SERVER"
+
 # Only run aarch64 against server target, as with flatpak we have no external dependencies
 # TODO: apply only tag for deps
 file $BASE/bazel-arm64
@@ -108,9 +144,6 @@ file $BASE/bazel-arm64
 #            --registry=file://$BASE/bcr \
 #            --repository_cache="$_MOZC_BAZEL_CACHE" \
 #            --config oss_linux --config release_build ${BUILD_TARGET_SERVER}
-
-run_bazel "flatpak run --arch=aarch64 --env=PATH=/app/bin:/usr/bin:/usr/local/bin:/usr/lib/sdk/bazel/bin --env=BASE=$BASE --env=PKG_CONFIG_PATH=/app/lib/pkgconfig --filesystem=host --filesystem=xdg-cache --filesystem=$PWD --filesystem=home --share=network --command=$BASE/bazel-arm64 org.freedesktop.Sdk/aarch64/23.08" $BUILD_TARGET_SERVER
-
 kill $PROXY_PID
 
 pushd .

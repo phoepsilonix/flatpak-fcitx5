@@ -33,7 +33,6 @@ jobs:
           cat /usr/lib/binfmt.d/qemu-aarch64-static.conf|sudo tee /proc/sys/fs/binfmt_misc/register||true
           sudo /usr/lib/systemd/systemd-binfmt
           cat /proc/sys/fs/binfmt_misc/qemu-aarch64||true
-          #sudo ldconfig
           wget -qO $PWD/bazel-arm64 https://github.com/bazelbuild/bazel/releases/download/7.3.2/bazel-7.3.2-linux-arm64
           chmod +x $PWD/bazel-arm64
           # TEST
@@ -49,10 +48,36 @@ jobs:
           wget -nc -qO $PWD/bazel-arm64 https://github.com/bazelbuild/bazel/releases/download/7.3.2/bazel-7.3.2-linux-arm64
           chmod +x $PWD/bazel-arm64
           su builduser -c "flatpak run --filesystem=$PWD --filesystem=home --share=network --command=$BASE/bazel-arm64 org.freedesktop.Sdk/aarch64/23.08 --version"
+          LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:/usr/aarch64-linux-gnu/lib:$LD_LIBRARY_PATH \
+          QEMU_LD_PREFIX=/usr/aarch64-linux-gnu PATH=$PATH:/usr/local/bin \
+          flatpak run --filesystem=host --filesystem=$PWD --filesystem=home --share=network --command=sh org.freedesktop.Sdk/aarch64/23.08 -c "/usr/lib/sdk/bazel/bin/bazel --version"
+          echo "1:"
+          LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:/usr/aarch64-linux-gnu/lib:$LD_LIBRARY_PATH \
+          QEMU_LD_PREFIX=/usr/aarch64-linux-gnu PATH=$PATH:/usr/local/bin \
+          flatpak run --env=PATH=/usr/bin:/app/bin:/usr/lib/sdk/bazel/bin --filesystem=host --filesystem=$PWD --filesystem=home --share=network --command=sh org.freedesktop.Sdk/aarch64/23.08 -c 'bazel --version'
+
+
+      - name: test
+        shell: bash
+        run: |
+          run_bazel_flatpak() {
+            echo $1 -c "$2 --version $3"
+            $1 -c "$2 --version $3"
+          }
+          export ARCH="aarch64"
+          LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:/usr/aarch64-linux-gnu/lib:$LD_LIBRARY_PATH \
+          QEMU_LD_PREFIX=/usr/aarch64-linux-gnu PATH=$PATH:/usr/local/bin \
+          run_bazel_flatpak "flatpak run --arch=$ARCH \
+          --env=PATH=$PATH:/usr/lib/sdk/bazel/bin:/app/bin \
+          --filesystem=$PWD --filesystem=home --share=network --filesystem=xdg-cache \
+          --command=sh \
+          org.freedesktop.Sdk/$ARCH/23.08" /usr/lib/sdk/bazel/bin/bazel "$BUILD_TARGET"
 
       - name: Install Build Dependency
         run: |
-          sudo pacman -Syu --needed --noconfirm base-devel clang cmake ninja extra-cmake-modules fmt libuv boost git qt6-base qt6-wayland libxkbcommon qt6-webengine flatpak procps-ng python3 yq wget git qemu-user-static-binfmt fcitx5-qt
+          sudo pacman -Syu --needed --noconfirm git jq yq
+          flatpak install -y org.kde.Sdk/x86_64/6.6 org.freedesktop.Sdk/x86_64/23.08 org.freedesktop.Sdk.Extension.bazel/x86_64/23.08 org.fcitx.Fcitx5/x86_64/stable 
+          flatpak update -y
 
       - uses: actions/checkout@v4
         with:
@@ -60,20 +85,17 @@ jobs:
           submodules: true
 
       - name: test
+        shell: bash
         run: |
           cd flatpak-fcitx5
-          #sudo chown -R builduser:builduser .
+          sudo chown -R builduser:builduser .
           #sudo mkdir -p /home/builduser/tmp
           #sudo chown -R builduser:builduser /home/builduser
 
           sudo -u builduser \
-            LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:$LD_LIBRARY_PATH \
+            LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:/usr/aarch64-linux-gnu/lib:$LD_LIBRARY_PATH \
             QEMU_LD_PREFIX=/usr/aarch64-linux-gnu PATH=$PATH:/usr/local/bin \
-            TMPDIR=/home/builduser/tmp \
+            TMPDIR=$PWD/tmp \
             ./update_mozc_deps
-          #sudo -u builduser PATH=$PATH:/usr/local/bin TMPDIR=/home/builduser/tmp/ ./update_mozc_deps
-          #su builduser --env PATH=$PATH:/usr/local/bin TMPDIR=/home/builduser/tmp/ -c './update_mozc_deps'
           #env $(printenv | grep '^ANDROID_NDK' | sed 's/=.*//;s/^/-u /') PATH=$PATH:/usr/local/bin TMPDIR=/home/builder/tmp sh -c './update_mozc_deps'
-          #LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:$LD_LIBRARY_PATH QEMU_LD_PREFIX=/usr/aarch64-linux-gnu PATH=$PATH:/usr/local/bin TMPDIR=/home/builder/tmp su builduser -c './update_mozc_deps'
-
-            #sudo chown -R root:root .
+          sudo chown -R root:root .
