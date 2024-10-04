@@ -15,7 +15,9 @@ jobs:
   update:
     name: Build and test
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    container:
+      image: archlinux/archlinux:latest
+      options: --privileged --cap-add=SYS_ADMIN --cap-add=SETPCAP --entrypoint /sbin/init
     strategy:
       fail-fast: false
     steps:
@@ -24,10 +26,43 @@ jobs:
           useradd -m builduser
       - name: Install dependencies
         run: |
-          pacman -Syu --noconfirm base-devel clang cmake ninja extra-cmake-modules fmt libuv boost git qt6-base qt6-wayland libxkbcommon qt6-webengine flatpak procps-ng python3 yq wget git qemu-user-static-binfmt docker
-          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-          /usr/lib/systemd/systemd-binfmt
+          pacman -Syu --noconfirm base-devel clang cmake ninja extra-cmake-modules fmt libuv boost git qt6-base qt6-wayland libxkbcommon qt6-webengine flatpak procps-ng python3 yq wget git
           flatpak install -y --system org.freedesktop.Sdk/aarch64/23.08
+
+      - name: qemu test
+        run: |
+          # load the binfmt_misc module
+          if [ ! -d /proc/sys/fs/binfmt_misc ]; then
+            if ! /sbin/modprobe binfmt_misc ; then
+              exit 1
+            fi
+          fi
+          if [ ! -f /proc/sys/fs/binfmt_misc/register ]; then
+            if ! mount binfmt_misc -t binfmt_misc /proc/sys/fs/binfmt_misc ; then
+              exit 1
+            fi
+          fi
+          #pacman -S --noconfirm docker
+          #docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+          wget https://github.com/qemu/qemu/raw/refs/heads/master/scripts/qemu-binfmt-conf.sh
+          chmod +x qemu-binfmt-conf.sh
+          ./qemu-binfmt-conf.sh
+          pacman -S --noconfirm qemu-user-static-binfmt
+          ./qemu-binfmt-conf.sh
+          ls -l /usr/local/bin/qemu-*||true
+          ls -l /usr/bin/qemu-*||true
+          ls -la /proc/sys/fs/binfmt_misc/
+          #wget https://github.com/qemu/qemu/raw/refs/heads/master/scripts/qemu-binfmt-conf.sh
+          #chmod +x qemu-binfmt-conf.sh
+          #./qemu-binfmt-conf.sh
+          #cat /usr/lib/binfmt.d/qemu-aarch64-static.conf| tee /proc/sys/fs/binfmt_misc/register||true
+          cat /proc/sys/fs/binfmt_misc/qemu-aarch64
+          /usr/lib/systemd/systemd-binfmt
+          wget -qO bazel-arm64 https://github.com/bazelbuild/bazel/releases/download/7.3.1/bazel-7.3.1-linux-arm64
+          chmod +x ./bazel-arm64
+          qemu-aarch64-static --version
+          qemu-aarch64-static ./bazel-arm64||true
+
       - uses: actions/checkout@v4
         with:
           repository: fcitx/fcitx5

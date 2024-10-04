@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  schedule:
+    - cron: "0 13 * * *"
+
+jobs:
+  update:
+    name: Build and test
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux/archlinux:latest
+      options: --privileged --cap-add=SYS_ADMIN --cap-add=SETPCAP --entrypoint /sbin/init
+    strategy:
+      fail-fast: false
+    steps:
+      - name: Non root user(builduser)
+        run: |
+          useradd -m -d /home/builduser/ -s /usr/bin/bash builduser
+          chown -R builduser:builduser /home/builduser
+
+      - name: Prepare qemu user static
+        run: |
+          pacman -Syu --needed --noconfirm sudo wget flatpak qemu-user-static-binfmt
+          sudo mount binfmt_misc -t binfmt_misc /proc/sys/fs/binfmt_misc||true
+          cat /usr/lib/binfmt.d/qemu-aarch64-static.conf|sudo tee /proc/sys/fs/binfmt_misc/register||true
+          sudo /usr/lib/systemd/systemd-binfmt
+          cat /proc/sys/fs/binfmt_misc/qemu-aarch64||true
+          #sudo ldconfig
+          wget -qO $PWD/bazel-arm64 https://github.com/bazelbuild/bazel/releases/download/7.3.2/bazel-7.3.2-linux-arm64
+          chmod +x $PWD/bazel-arm64
+          # TEST
+          flatpak install -y org.freedesktop.Sdk/aarch64/23.08
+          flatpak install -y org.freedesktop.Sdk.Extension.bazel/aarch64/23.08
+          flatpak update -y
+          BASE=$PWD
+          flatpak run --filesystem=$PWD --filesystem=home --share=network --command=$PWD/bazel-arm64 org.freedesktop.Sdk/aarch64/23.08 --version
+          flatpak run --filesystem=$PWD --filesystem=home --share=network --command=$PWD/bazel-arm64 org.freedesktop.Sdk/aarch64/23.08 --version
+
+          cd /home/builduser
+          BASE=$PWD
+          wget -nc -qO $PWD/bazel-arm64 https://github.com/bazelbuild/bazel/releases/download/7.3.2/bazel-7.3.2-linux-arm64
+          chmod +x $PWD/bazel-arm64
+          su builduser -c "flatpak run --filesystem=$PWD --filesystem=home --share=network --command=$BASE/bazel-arm64 org.freedesktop.Sdk/aarch64/23.08 --version"
+
+      - name: Install Build Dependency
+        run: |
+          sudo pacman -Syu --needed --noconfirm base-devel clang cmake ninja extra-cmake-modules fmt libuv boost git qt6-base qt6-wayland libxkbcommon qt6-webengine flatpak procps-ng python3 yq wget git qemu-user-static-binfmt fcitx5-qt
+
+      - uses: actions/checkout@v4
+        with:
+          path: flatpak-fcitx5
+          submodules: true
+
+      - name: test
+        run: |
+          cd flatpak-fcitx5
+          #sudo chown -R builduser:builduser .
+          #sudo mkdir -p /home/builduser/tmp
+          #sudo chown -R builduser:builduser /home/builduser
+
+          sudo -u builduser \
+            LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:$LD_LIBRARY_PATH \
+            QEMU_LD_PREFIX=/usr/aarch64-linux-gnu PATH=$PATH:/usr/local/bin \
+            TMPDIR=/home/builduser/tmp \
+            ./update_mozc_deps
+          #sudo -u builduser PATH=$PATH:/usr/local/bin TMPDIR=/home/builduser/tmp/ ./update_mozc_deps
+          #su builduser --env PATH=$PATH:/usr/local/bin TMPDIR=/home/builduser/tmp/ -c './update_mozc_deps'
+          #env $(printenv | grep '^ANDROID_NDK' | sed 's/=.*//;s/^/-u /') PATH=$PATH:/usr/local/bin TMPDIR=/home/builder/tmp sh -c './update_mozc_deps'
+          #LD_LIBRARY_PATH=/usr/aarch64-linux-gnu/lib64:$LD_LIBRARY_PATH QEMU_LD_PREFIX=/usr/aarch64-linux-gnu PATH=$PATH:/usr/local/bin TMPDIR=/home/builder/tmp su builduser -c './update_mozc_deps'
+
+            #sudo chown -R root:root .
