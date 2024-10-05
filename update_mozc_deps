@@ -28,8 +28,8 @@ check_and_download_bazel() {
 }
 
 run_bazel() {
-    #echo $1 clean --expunge
-    #$1 clean --expunge
+    echo $1 clean --expunge
+    $1 clean --expunge
     echo $1 build --nobuild --experimental_downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://$BASE/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build $2
     $1 build --nobuild --experimental_downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://$BASE/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build $2
 }
@@ -87,7 +87,7 @@ cd mozc/src/
 BUILD_TARGET_SERVER="server:mozc_server"
 BUILD_TARGET="unix/fcitx5:fcitx5-mozc.so ${BUILD_TARGET_SERVER} gui/tool:mozc_tool"
 
-#run_bazel "$BASE/bazel-x86_64" $BUILD_TARGET
+run_bazel "$BASE/bazel-x86_64" $BUILD_TARGET
 # Only run aarch64 against server target, as with flatpak we have no external dependencies
 # TODO: apply only tag for deps
 run_bazel "flatpak run --arch=aarch64
