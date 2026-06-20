@@ -110,7 +110,3 @@
   url: https://github.com/protocolbuffers/protobuf/releases/download/v34.1/protobuf-34.1.bazel.tar.gz
   dest: bazel-deps
   sha256: 9f0933ad12abb0a8957b3b64aefc34774ccbe57f77f890c66cb4067519bb83c1
-- type: file
-  url: https://go.dev/dl/?mode=json&include=all
-  dest: bazel-deps
-  sha256: e391ba2a2e9e012b337f2adcdc68cd64dc0b3247fd703b9607d5341c4392ce84
