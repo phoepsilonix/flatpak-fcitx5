@@ -64,7 +64,6 @@ modules:
     buildsystem: cmake-ninja
     config-opts:
       - -DCMAKE_BUILD_TYPE=Release
-      - -DUSE_QT6=On
       - -DSKK_PATH=/app/addons/Skk/share/skk
     sources:
       - type: git
