@@ -17,7 +17,7 @@ sources:
       stable-only: true
       url-template: https://github.com/bazelbuild/bazel/releases/download/${version}/bazel-${version}-linux-x86_64
       versions:
-        <: 9.0.0
+        =: 9.0.2
   - type: file
     only-arches:
       - aarch64
@@ -30,7 +30,7 @@ sources:
       stable-only: true
       url-template: https://github.com/bazelbuild/bazel/releases/download/${version}/bazel-${version}-linux-arm64
       versions:
-        <: 9.0.0
+        =: 9.0.2
 build-commands:
   - install -D -m755 bazel ${FLATPAK_DEST}/bin/bazel
 cleanup:
