@@ -30,15 +30,15 @@ check_and_download_bazel() {
 run_bazel() {
     echo $1 clean --expunge
     $1 clean --expunge
-    echo $1 build --nobuild --experimental_downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://$BASE/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build $2
-    $1 build --noshow_progress --nobuild --experimental_downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://$BASE/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build $2
+    echo $1 build --nobuild --downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://$BASE/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build $2
+    $1 build --noshow_progress --nobuild --downloader_config="$SCRIPT_DIRECTORY/downloader.cfg" --registry=file://$BASE/bcr --repository_cache="$_MOZC_BAZEL_CACHE" --config oss_linux --config release_build $2
 }
 
 trap cleanup EXIT
 
 SCRIPT_PATH="$(realpath "${BASH_SOURCE[-1]}")"
 SCRIPT_DIRECTORY="$(dirname "$SCRIPT_PATH")"
-BAZEL_VERSION=7.3.2
+BAZEL_VERSION=9.0.2
 
 set -e
 
@@ -108,6 +108,6 @@ for f in `find -type f` ; do
 done > $SCRIPT_DIRECTORY/mozc-deps.yaml
 popd
 
-yq -y -i 'sort_by(.url)' "$SCRIPT_DIRECTORY/mozc-deps.yaml"
+yq -y -i 'sort_by(.url) | map(select(.url | startswith("https://go.dev/dl") | not ))' "$SCRIPT_DIRECTORY/mozc-deps.yaml"
 
 rm -rf "$BASE"
